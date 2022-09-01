@@ -2,7 +2,7 @@ import logging
 import os
 import time
 from http import HTTPStatus
-from typing import Dict
+from typing import Any, List, Mapping
 
 import requests
 from dotenv import load_dotenv
@@ -13,7 +13,7 @@ from exceptions import EndpointUnavailableError
 
 load_dotenv()
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.ERROR)
+logging.basicConfig(level=logging.INFO)
 
 stream_handler = logging.StreamHandler()
 logger.addHandler(stream_handler)
@@ -44,10 +44,10 @@ def send_message(bot: Bot, message: str):
         )
         logging.info('Сообщение отправлено успешно!')
     except Exception as e:
-        logging.error(f'При отправке сообщения произошла ошибка {e}')
+        logging.exception(f'При отправке сообщения произошла ошибка {e}')
 
 
-def get_api_answer(current_timestamp: int) -> Response:
+def get_api_answer(current_timestamp: int):
     """Делает запрос к апи домашек яндекс практикума."""
     timestamp: int = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
@@ -57,6 +57,8 @@ def get_api_answer(current_timestamp: int) -> Response:
     except Exception as e:
         message_request_error = f'Ошибка при попытке доступа к апи: {e}'
         logging.error(message_request_error)
+        raise Exception(e)
+
     if homeworks_response.status_code != HTTPStatus.OK:
         error_message_api_unavailable = (
             f'Эндпоинт недоступен.'
@@ -66,14 +68,14 @@ def get_api_answer(current_timestamp: int) -> Response:
     return homeworks_response.json()
 
 
-def check_response(response):
+def check_response(response) -> List[Mapping]:
     """Проверяет правильность ответа апи."""
     if not isinstance(response, dict):
-        error_message_dict = 'Ответ апи пришел в виде словаря.'
+        error_message_dict = 'Ответ апи пришел не в виде словаря.'
         logging.error(error_message_dict)
         raise TypeError(error_message_dict)
 
-    homeworks_list = response.get('homeworks')
+    homeworks_list: List[Mapping] = response.get('homeworks')
 
     if not isinstance(homeworks_list, list):
         error_message_list = 'Под ключом homeworks находится не список.'
@@ -83,17 +85,19 @@ def check_response(response):
     return homeworks_list
 
 
-def parse_status(homework: Dict) -> str:
+def parse_status(homework: Mapping[str, Any]) -> str:
     """Получает статус домашки и формирует сообщение для отправки."""
-    homework_name = homework.get('homework_name')
-    homework_status = homework.get('status')
+    homework_name: str = homework.get('homework_name')
+    homework_status: str = homework.get('status')
 
-    if homework_status not in HOMEWORK_STATUSES.keys():
+    if not homework_name or homework_status not in HOMEWORK_STATUSES.keys():
         error_message = (
-            f'Неожиданный статус домашней работы: {homework_status}')
+            f'Неожиданные входные данные: '
+            f'название: {homework_name}, статус: {homework_status}')
         logging.error(error_message)
+        raise KeyError(error_message)
 
-    verdict = HOMEWORK_STATUSES[homework_status]
+    verdict: str = HOMEWORK_STATUSES[homework_status]
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
@@ -113,15 +117,14 @@ def main():
     if not check_tokens():
         return
 
-    bot = Bot(token=TELEGRAM_TOKEN)
-    current_timestamp = int(time.time())
+    bot: Bot = Bot(token=TELEGRAM_TOKEN)
+    current_timestamp: int = int(time.time())
 
     while True:
         try:
-            response = get_api_answer(current_timestamp)
-            logging.debug(response)
+            homeworks_data = get_api_answer(current_timestamp)
 
-            homeworks = check_response(response)
+            homeworks = check_response(homeworks_data)
             if homeworks:
                 for homework in homeworks:
                     send_message(bot, parse_status(homework))
@@ -131,7 +134,7 @@ def main():
             time.sleep(RETRY_TIME)
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
-            logging.error(message)
+            logging.exception(message)
             send_message(bot, message)
             time.sleep(RETRY_TIME)
 
