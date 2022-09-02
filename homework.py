@@ -2,7 +2,7 @@ import logging
 import os
 import time
 from http import HTTPStatus
-from typing import Any, List, Mapping
+from typing import Any, Dict, List, Mapping, Optional
 
 import requests
 from dotenv import load_dotenv
@@ -47,7 +47,7 @@ def send_message(bot: Bot, message: str):
         logging.exception(f'При отправке сообщения произошла ошибка {e}')
 
 
-def get_api_answer(current_timestamp: int):
+def get_api_answer(current_timestamp: int) -> Dict:
     """Делает запрос к апи домашек яндекс практикума."""
     timestamp: int = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
@@ -57,7 +57,7 @@ def get_api_answer(current_timestamp: int):
     except Exception as e:
         message_request_error = f'Ошибка при попытке доступа к апи: {e}'
         logging.error(message_request_error)
-        raise Exception(e)
+        raise Exception(message_request_error) from e
 
     if homeworks_response.status_code != HTTPStatus.OK:
         error_message_api_unavailable = (
@@ -68,7 +68,7 @@ def get_api_answer(current_timestamp: int):
     return homeworks_response.json()
 
 
-def check_response(response) -> List[Mapping]:
+def check_response(response: Dict) -> List[Mapping]:
     """Проверяет правильность ответа апи."""
     if not isinstance(response, dict):
         error_message_dict = 'Ответ апи пришел не в виде словаря.'
@@ -87,8 +87,8 @@ def check_response(response) -> List[Mapping]:
 
 def parse_status(homework: Mapping[str, Any]) -> str:
     """Получает статус домашки и формирует сообщение для отправки."""
-    homework_name: str = homework.get('homework_name')
-    homework_status: str = homework.get('status')
+    homework_name: Optional[str] = homework.get('homework_name')
+    homework_status: Optional[str] = homework.get('status')
 
     if not homework_name or homework_status not in HOMEWORK_STATUSES.keys():
         error_message = (
