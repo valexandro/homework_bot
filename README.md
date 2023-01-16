@@ -1,2 +1,8 @@
-# homework_bot
-python telegram bot
+# Homework Telegram Bot
+Бот для получения статуса проверки домашних работ через апи Практикум.Домашка
+
+Требуется oauth токен API Практикум.Домашка
+
+## Технологии
+- Python 3.7
+- python-telegram-bot==13.7
